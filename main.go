@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net"
 	"net/http"
@@ -13,13 +14,13 @@ const tmzArea = "Europe"
 const tmzLocation = "Rome"
 
 func main() {
-	help, format, sudo := parseFlags()
+	help, format, sudo, area, location := parseFlags()
 	if help {
 		fmt.Fprintln(os.Stderr, helpScreen)
 		os.Exit(0)
 	}
 
-	result, err := getDateFromApi(tmzArea, tmzLocation)
+	result, err := getDateFromApi(area, location)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
@@ -47,6 +48,10 @@ func getDateFromApi(area, location string) (ApiResult, error) {
 		return ApiResult{}, err
 	}
 
+	if res.StatusCode != 200 {
+		return ApiResult{}, fmt.Errorf("getDateFromApi: server responded with %d", res.StatusCode)
+	}
+
 	result := ApiResult{}
 	err = json.NewDecoder(res.Body).Decode(&result)
 	if err != nil {
@@ -56,23 +61,24 @@ func getDateFromApi(area, location string) (ApiResult, error) {
 	return result, nil
 }
 
-func parseFlags() (help, formatCommand, sudo bool) {
-	if len(os.Args) <= 1 {
-		return
-	}
+func parseFlags() (help, formatCommand, sudo bool, area, location string) {
+	flag.BoolVar(&help, "help", false, "")
+	flag.BoolVar(&help, "h", false, "")
+	flag.BoolVar(&formatCommand, "command", false, "")
+	flag.BoolVar(&formatCommand, "c", false, "")
+	flag.BoolVar(&sudo, "sudo", false, "")
+	flag.BoolVar(&sudo, "s", false, "")
 
-	for _, flag := range os.Args[1:] {
-		if flag == "--help" || flag == "-h" {
-			help = true
-		}
+	flag.StringVar(&area, "area", tmzArea, "")
+	flag.StringVar(&area, "a", tmzArea, "")
+	flag.StringVar(&location, "location", tmzLocation, "")
+	flag.StringVar(&location, "l", tmzLocation, "")
 
-		if flag == "--command" || flag == "-c" {
-			formatCommand = true
-		}
+	flag.Usage = func() {}
+	flag.Parse()
 
-		if flag == "--sudo" || flag == "-s" {
-			sudo = true
-		}
+	if sudo {
+		formatCommand = true
 	}
 
 	return
@@ -115,16 +121,32 @@ type ApiResult struct {
 }
 
 func (r ApiResult) UnixFormat() string {
-	return fmt.Sprintf("%02d%02d%02d %d:%d",
+	return fmt.Sprintf("%02d%02d%02d %02d:%02d",
 		r.DateTime.Year(),
 		r.DateTime.Month(),
 		r.DateTime.Day(),
 		r.DateTime.Hour(),
-		r.DateTime.Second(),
+		r.DateTime.Minute(),
 	)
 }
 
 const helpScreen = `dateupdate by Lorenzo Botti
-	This program calls the WorldTimeAPI (worldtimeapi.org) and formats its
-	responde the way the date command accepts it. It's meant to help when
-	fucking retard Manjaro can't figure out what time it is`
+This program calls the WorldTimeAPI (worldtimeapi.org) and formats its
+responde the way the date command accepts it. It's meant to help when
+fucking retard Manjaro can't figure out what time it is
+
+Flags:
+--help, -h:
+    Show this help screen
+    
+--command, -c
+    Format the output as a date command. Example: date --set "20021227 21:23"
+    
+--sudo, -s
+    Format the output as a date command with sudo. Example: sudo date --set "20021227 21:23"
+
+--location, -l
+    Set the location of the timezone in the call to the API. Example: Europe
+
+--area, -a
+    Set the area of the timezone in the call to the API. Example: Rome`
